@@ -32,6 +32,10 @@ int obstacleCount = 0;
 Texture obstacleTexture;
 
 // Function Declarations
+// Track sprays and bullets fired
+int spraysAvailable = 3;   // Configurable sprays (start with 3)
+int bulletsFired = 0;      // Number of bullets fired
+
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite);
 void moveBullet(float& bullet_y, bool& bullet_exists, Clock& bulletClock);
 void drawBullet(RenderWindow& window, float& bullet_x, float& bullet_y, Sprite& bulletSprite);
@@ -95,19 +99,25 @@ int main() {
     Texture honeycombTexture;
     honeycombTexture.loadFromFile("Textures/honeycomb.png");  // Add your honeycomb image here
 
-    // Score variable
+    // Score setup
     int score = 0;
-
-    // Score display setup
     Font font;
     if (!font.loadFromFile("Roboto/Roboto-Regular.ttf")) {
-        cout << "Error: Could not load font!" << endl;
-        return -1;
+        cout << "Error loading font!" << endl;
     }
     Text scoreText;
     scoreText.setFont(font);
     scoreText.setCharacterSize(24);
     scoreText.setFillColor(Color::White);
+
+    // Spray texture
+    // Texture sprayTexture;
+    // if (!sprayTexture.loadFromFile("Textures/spray.png")) {
+    //     cout << "Error loading spray texture!" << endl;
+    // }
+    Sprite spraySprite;
+    spraySprite.setTexture(playerTexture);
+    // spraySprite.setScale(1.0f, 1.0f);// Resize spray icon if needed
 
     while (window.isOpen()) {
         Event e;
@@ -126,11 +136,18 @@ int main() {
         }
 
         // Bullet firing logic: Fire bullet when spacebar is pressed
-        if (Keyboard::isKeyPressed(Keyboard::Space) && !bullet_exists) {
+        if (Keyboard::isKeyPressed(Keyboard::Space) && !bullet_exists && spraysAvailable > 0) {
             bullet_x = player_x + (boxPixelsX / 2);  // Set the bullet position to player's current position
             bullet_y = player_y;  // Bullet starts from player's y position
             bullet_exists = true;  // Bullet exists now
             bulletClock.restart(); // Restart the bullet movement clock
+            bulletsFired++;       // Increment bullets fired
+
+            // Check if 56 bullets have been fired and reduce spray count
+            if (bulletsFired >= 56) {
+                spraysAvailable--;    // Decrease available sprays
+                bulletsFired = 0;     // Reset bullet count
+            }
         }
 
         // Check for bullet collision with bees
@@ -169,17 +186,23 @@ int main() {
             }
         }
 
-        
-
+        // Draw the ground
         window.draw(groundRectangle);
 
-		// Display score
+        // Display the score after drawing all game objects
         scoreText.setString("Score: " + to_string(score));
         scoreText.setPosition(resolutionX - 150, resolutionY - 50);
-		
-        window.draw(scoreText);
-        // Draw obstacles
+        window.draw(scoreText); // Draw the score on top of the ground
+
         drawObstacles(window, obstacleTexture);
+
+        // Display the spray icons
+        for (int i = 0; i < spraysAvailable; i++) {
+            spraySprite.setPosition(10 + i * (spraySprite.getLocalBounds().width + 10), resolutionY - 50);
+            window.draw(spraySprite); // Draw each spray icon
+        }
+
+        // Display everything on screen
         window.display();
         window.clear();
     }
