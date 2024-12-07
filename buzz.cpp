@@ -1,5 +1,6 @@
-#include <SFML/Graphics.hpp>
 #include <iostream>
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <cstdlib>
 #include <ctime>
 
@@ -28,8 +29,7 @@ float obstacleX[maxObstacles] = { 0 };
 float obstacleY[maxObstacles] = { 0 };
 int obstacleCount = 0;
 
-// Obstacle texture
-Texture obstacleTexture;
+
 
 // Function Declarations
 // Track sprays and bullets fired
@@ -39,7 +39,7 @@ int bulletsFired = 0;      // Number of bullets fired
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite);
 void moveBullet(float& bullet_y, bool& bullet_exists, Clock& bulletClock);
 void drawBullet(RenderWindow& window, float& bullet_x, float& bullet_y, Sprite& bulletSprite);
-void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime);
+void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime, Texture beeTexture);
 void moveBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[]);
 void drawObstacles(RenderWindow& window, Texture& obstacleTexture);
 bool checkBulletHit(float bullet_x, float bullet_y, float& beeX, float& beeY);
@@ -52,15 +52,24 @@ int main() {
     RenderWindow window(VideoMode(resolutionX, resolutionY), "Buzz Bombers", Style::Close | Style::Titlebar);
     window.setPosition(Vector2i(960, 64));
 
-    // Load obstacle texture
-    if (!obstacleTexture.loadFromFile("Textures/obstacles.png")) {
-        cout << "Error: Could not load obstacle texture!" << endl;
-        return -1;
+    // Initializing Background Music.
+    Music bgMusic;
+    if (!bgMusic.openFromFile("Music/Music3.ogg")) {
+        cout << "Error: Could not load music file!" << endl;
     }
+
+    // Obstacle texture
+    Texture obstacleTexture;
+    // Load obstacle texture
+    obstacleTexture.loadFromFile("Textures/obstacles.png");
+
+    bgMusic.setVolume(50);
+    bgMusic.setLoop(true);
+    bgMusic.play();
 
     // Initializing Player and Player Sprites
     float player_x = (resolutionX - boxPixelsX) / 2;
-    float player_y = resolutionY - 96 - boxPixelsY;
+    float player_y = resolutionY - 64 - boxPixelsY;
 
     Texture playerTexture;
     Sprite playerSprite;
@@ -110,20 +119,19 @@ int main() {
     scoreText.setCharacterSize(24);
     scoreText.setFillColor(Color::White);
 
-    // Spray texture
-    // Texture sprayTexture;
-    // if (!sprayTexture.loadFromFile("Textures/spray.png")) {
-    //     cout << "Error loading spray texture!" << endl;
-    // }
+    
     Sprite spraySprite;
     spraySprite.setTexture(playerTexture);
+
+    Texture beeTexture;
+    beeTexture.loadFromFile("Textures/Regular_bee.png");
     // spraySprite.setScale(1.0f, 1.0f);// Resize spray icon if needed
 
     while (window.isOpen()) {
         Event e;
         while (window.pollEvent(e)) {
             if (e.type == Event::Closed) {
-                window.close();
+                return 0;
             }
         }
 
@@ -164,9 +172,9 @@ int main() {
                 }
             }
         }
-
+        window.clear();
         // Spawn and move bees
-        spawnBees(beeSprites, beeX, beeY, beeDirection, beeClock, lastSpawnTime);
+        spawnBees(beeSprites, beeX, beeY, beeDirection, beeClock, lastSpawnTime, beeTexture);
         moveBees(beeSprites, beeX, beeY, beeDirection);
 
         
@@ -202,12 +210,12 @@ int main() {
             window.draw(spraySprite); // Draw each spray icon
         }
 
+        
         // Display everything on screen
         window.display();
-        window.clear();
+        
     }
 
-    return 0;
 }
 
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite) {
@@ -230,7 +238,7 @@ void drawBullet(sf::RenderWindow& window, float& bullet_x, float& bullet_y, Spri
     window.draw(bulletSprite);
 }
 
-void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime) {
+void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime, Texture beeTexture) {
     // Random spawn interval (between 1 and 3 seconds)
     float currentTime = beeClock.getElapsedTime().asSeconds();
 
@@ -239,8 +247,7 @@ void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection
         for (int i = 0; i < maxBees; i++) {
             if (!beeActive[i]) { // Check if the bee hasn't been spawned yet
                 // Bee texture
-                Texture beeTexture;
-                beeTexture.loadFromFile("Textures/Regular_bee.png");
+                
                 beeSprites[i].setTexture(beeTexture);
 
                 // Set starting position to top-left (0, 0)
