@@ -87,6 +87,20 @@ int main()
     Texture honeycombTexture;
     honeycombTexture.loadFromFile("Textures/honeycomb.png");  // Add your honeycomb image here
 
+    // Score variable
+    int score = 0;
+
+    // Score display setup
+    Font font;
+    if (!font.loadFromFile("Roboto/Roboto-Regular.ttf")) {
+        cout << "Error: Could not load font!" << endl;
+        return -1;
+    }
+    Text scoreText;
+    scoreText.setFont(font);
+    scoreText.setCharacterSize(24);
+    scoreText.setFillColor(Color::White);
+
     while (window.isOpen()) {
         Event e;
         while (window.pollEvent(e)) {
@@ -124,6 +138,9 @@ int main()
                         beeSprites[i].setTexture(honeycombTexture);
                         beePaused[i] = true;  // Mark bee as paused (hit by bullet)
                         bullet_exists = false;  // Bullet disappears after hitting a bee
+
+                        // Increase the score by 100
+                        score += 100;
                         break;  // Only allow the first hit to register
                     }
                 }
@@ -156,7 +173,15 @@ int main()
             }
         }
 
+        
+
         window.draw(groundRectangle);
+
+		// Display score
+        scoreText.setString("Score: " + to_string(score));
+        scoreText.setPosition(resolutionX - 150, resolutionY - 50);
+		
+        window.draw(scoreText);
         window.display();
         window.clear();
     }
@@ -240,6 +265,3 @@ bool checkBulletHit(float bullet_x, float bullet_y, float& beeX, float& beeY) {
     // Check if the bullet intersects with the bee's area
     return (bullet_x > beeX - boxPixelsX && bullet_x < beeX + boxPixelsX && bullet_y > beeY && bullet_y < beeY + boxPixelsY);
 }
-
-
-// show can
