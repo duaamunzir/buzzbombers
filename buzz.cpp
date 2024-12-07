@@ -265,3 +265,5 @@ bool checkBulletHit(float bullet_x, float bullet_y, float& beeX, float& beeY) {
     // Check if the bullet intersects with the bee's area
     return (bullet_x > beeX - boxPixelsX && bullet_x < beeX + boxPixelsX && bullet_y > beeY && bullet_y < beeY + boxPixelsY);
 }
+
+// show cans
