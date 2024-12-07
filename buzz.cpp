@@ -1,13 +1,12 @@
-#include <iostream>
 #include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
+#include <iostream>
 #include <cstdlib>
 #include <ctime>
 
 using namespace std;
 using namespace sf;
 
-// Initializing Dimensions.
+// Initializing Dimensions
 const int resolutionX = 960;
 const int resolutionY = 640;
 const int boxPixelsX = 32;
@@ -16,37 +15,46 @@ const int gameRows = resolutionY / boxPixelsY; // Total rows on grid
 const int gameColumns = resolutionX / boxPixelsX; // Total columns on grid
 
 // Configurable number of bees
-const int maxBees = 5; // Number of bees that can exist at once
+const int maxBees = 20; // Number of bees that can exist at once
 
 // Array to track if a bee has been spawned or hit
 bool beeActive[maxBees] = { false };
 bool beePaused[maxBees] = { false };  // Track paused bees (hit by bullet)
 
+// Max obstacles and tracking
+const int maxObstacles = 100;
+bool obstacleActive[maxObstacles] = { false };
+float obstacleX[maxObstacles] = { 0 };
+float obstacleY[maxObstacles] = { 0 };
+int obstacleCount = 0;
+
+// Obstacle texture
+Texture obstacleTexture;
+
+// Function Declarations
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite);
 void moveBullet(float& bullet_y, bool& bullet_exists, Clock& bulletClock);
 void drawBullet(RenderWindow& window, float& bullet_x, float& bullet_y, Sprite& bulletSprite);
 void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime);
 void moveBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[]);
+void drawObstacles(RenderWindow& window, Texture& obstacleTexture);
 bool checkBulletHit(float bullet_x, float bullet_y, float& beeX, float& beeY);
+bool checkCollisionWithObstacles(float player_x, float player_y);
 
-int main()
-{
+int main() {
     srand(time(0));
 
     // Declaring RenderWindow.
     RenderWindow window(VideoMode(resolutionX, resolutionY), "Buzz Bombers", Style::Close | Style::Titlebar);
     window.setPosition(Vector2i(960, 64));
 
-    // Initializing Background Music.
-    Music bgMusic;
-    if (!bgMusic.openFromFile("Music/Music3.ogg")) {
-        cout << "Error: Could not load music file!" << endl;
+    // Load obstacle texture
+    if (!obstacleTexture.loadFromFile("Textures/obstacles.png")) {
+        cout << "Error: Could not load obstacle texture!" << endl;
+        return -1;
     }
-    bgMusic.setVolume(50);
-    bgMusic.setLoop(true);
-    bgMusic.play();
 
-    // Initializing Player and Player Sprites.
+    // Initializing Player and Player Sprites
     float player_x = (resolutionX - boxPixelsX) / 2;
     float player_y = resolutionY - 96 - boxPixelsY;
 
@@ -105,20 +113,16 @@ int main()
         Event e;
         while (window.pollEvent(e)) {
             if (e.type == Event::Closed) {
-                return 0;
+                window.close();
             }
         }
 
         // Player movement logic
-        if (Keyboard::isKeyPressed(Keyboard::Left)) {
-            if (player_x > 0) {
-                player_x -= 5; // Move left
-            }
+        if (Keyboard::isKeyPressed(Keyboard::Left) && !checkCollisionWithObstacles(player_x - 5, player_y)) {
+            player_x -= 5; // Move left
         }
-        if (Keyboard::isKeyPressed(Keyboard::Right)) {
-            if (player_x < resolutionX - boxPixelsX) {
-                player_x += 5; // Move right
-            }
+        if (Keyboard::isKeyPressed(Keyboard::Right) && !checkCollisionWithObstacles(player_x + 5, player_y)) {
+            player_x += 5; // Move right
         }
 
         // Bullet firing logic: Fire bullet when spacebar is pressed
@@ -138,9 +142,6 @@ int main()
                         beeSprites[i].setTexture(honeycombTexture);
                         beePaused[i] = true;  // Mark bee as paused (hit by bullet)
                         bullet_exists = false;  // Bullet disappears after hitting a bee
-
-                        // Increase the score by 100
-                        score += 100;
                         break;  // Only allow the first hit to register
                     }
                 }
@@ -151,15 +152,10 @@ int main()
         spawnBees(beeSprites, beeX, beeY, beeDirection, beeClock, lastSpawnTime);
         moveBees(beeSprites, beeX, beeY, beeDirection);
 
-        /////////////////////////////////////////////////////////////////
-        //                                                           //
-        // Call Your Functions Here. Some have been written for you. //
-        // Be very aware of the order you call them, SFML draws in order. //
-        //                                                           //
-        /////////////////////////////////////////////////////////////////
+        
 
-        if (bullet_exists == true)
-        {
+        // Update everything
+        if (bullet_exists == true) {
             moveBullet(bullet_y, bullet_exists, bulletClock);
             drawBullet(window, bullet_x, bullet_y, bulletSprite);
         }
@@ -182,9 +178,13 @@ int main()
         scoreText.setPosition(resolutionX - 150, resolutionY - 50);
 		
         window.draw(scoreText);
+        // Draw obstacles
+        drawObstacles(window, obstacleTexture);
         window.display();
         window.clear();
     }
+
+    return 0;
 }
 
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite) {
@@ -236,11 +236,42 @@ void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection
     }
 }
 
+
+bool isBeeOverlappingWithObstacle(float beeX, float beeY, float obstacleX[], float obstacleY[], int maxObstacles) {
+    // Iterate through existing obstacles and check if the bee position overlaps
+    for (int i = 0; i < maxObstacles; i++) {
+        if (obstacleX[i] == beeX && obstacleY[i] == beeY) {
+            return true; // Bee is overlapping with an obstacle
+        }
+    }
+    return false; // No overlap with any obstacle
+}
+
+bool spawnObstaclesWhenBeeHitsGround(int beeX, int beeY) {
+ 
+    if (beeY >= resolutionY - 96) {
+        // Check if the bee's position doesn't overlap with an existing obstacle
+        if (!isBeeOverlappingWithObstacle(beeX, beeY, obstacleX, obstacleY, maxObstacles)) {
+            // Mark obstacle here
+            if (obstacleCount < maxObstacles) {
+                obstacleX[obstacleCount] = beeX;
+                obstacleY[obstacleCount] = beeY;
+                obstacleActive[obstacleCount] = true;
+                obstacleCount++;
+
+                return true;
+            }
+        }
+    }
+    return false;
+    
+}
+
 void moveBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[]) {
     for (int i = 0; i < maxBees; i++) {
         if (beeActive[i] && !beePaused[i]) { // Only move active and not paused bees
             // Move bee horizontally
-            beeX[i] += 2 * beeDirection[i]; // Move 2 pixels per frame
+            beeX[i] += 5 * beeDirection[i]; // Move 2 pixels per frame
 
             // If bee reaches the right edge, turn it around and drop vertically
             if (beeX[i] > resolutionX - boxPixelsX) {
@@ -256,6 +287,10 @@ void moveBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[
 
             // Update bee position
             beeSprites[i].setPosition(beeX[i], beeY[i]);
+            if (spawnObstaclesWhenBeeHitsGround(beeX[i], beeY[i])) {
+                beeActive[i] = false;
+            }
+
         }
     }
 }
@@ -265,3 +300,35 @@ bool checkBulletHit(float bullet_x, float bullet_y, float& beeX, float& beeY) {
     // Check if the bullet intersects with the bee's area
     return (bullet_x > beeX - boxPixelsX && bullet_x < beeX + boxPixelsX && bullet_y > beeY && bullet_y < beeY + boxPixelsY);
 }
+
+// Function to check collision with obstacles
+bool checkCollisionWithObstacles(float player_x, float player_y) {
+    for (int i = 0; i < obstacleCount; i++) {
+        if (obstacleActive[i]) {
+            // Check if player position collides with any obstacle
+            if (player_x >= obstacleX[i] && player_x <= obstacleX[i] + boxPixelsX &&
+                player_y >= obstacleY[i] && player_y <= obstacleY[i] + boxPixelsY) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void drawObstacles(RenderWindow& window, Texture& obstacleTexture) {
+    for (int i = 0; i < obstacleCount; i++) {
+        if (obstacleActive[i]) {
+            Sprite obstacleSprite;
+            obstacleSprite.setTexture(obstacleTexture);
+            obstacleSprite.setPosition(obstacleX[i], obstacleY[i]);
+
+            // Scale the obstacle sprite to fit the grid size
+            obstacleSprite.setScale(static_cast<float>(boxPixelsX) / obstacleSprite.getLocalBounds().width,
+                                    static_cast<float>(boxPixelsY) / obstacleSprite.getLocalBounds().height);
+
+            window.draw(obstacleSprite);
+        }
+    }
+}
+
+
