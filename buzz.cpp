@@ -17,7 +17,8 @@ const int gameColumns = resolutionX / boxPixelsX; // Total columns on grid
 
 // Configurable number of bees
 const int maxBees = 20; // Number of bees that can exist at once
-
+// Score setup
+int score = 0;
 // Array to track if a bee has been spawned or hit
 bool beeActive[maxBees] = { false };
 bool beePaused[maxBees] = { false };  // Track paused bees (hit by bullet)
@@ -36,14 +37,32 @@ int obstacleCount = 0;
 int spraysAvailable = 3;   // Configurable sprays (start with 3)
 int bulletsFired = 0;      // Number of bullets fired
 
+Sprite hummingbirdSprite;
+Texture hummingbirdTexture;
+float hummingbirdX = -100; // Off-screen initially
+float hummingbirdY = -100; // Off-screen initially
+bool hummingbirdActive = false;
+Clock hummingbirdClock; // Timer to control hummingbird spawn
+float lastHummingbirdSpawnTime = 0;
+bool hummingbirdLanded = false; // Track if the hummingbird has landed
+int hummingbirdFlightDuration = 5; // Duration for hummingbird flight (seconds)
+
+Texture honeycombTexture;
+
+
+void menu(RenderWindow& window, Font& font);
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite);
 void moveBullet(float& bullet_y, bool& bullet_exists, Clock& bulletClock);
 void drawBullet(RenderWindow& window, float& bullet_x, float& bullet_y, Sprite& bulletSprite);
-void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime, Texture beeTexture);
+void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime);
 void moveBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[]);
 void drawObstacles(RenderWindow& window, Texture& obstacleTexture);
 bool checkBulletHit(float bullet_x, float bullet_y, float& beeX, float& beeY);
 bool checkCollisionWithObstacles(float player_x, float player_y);
+void drawHummingbird(RenderWindow& window);
+void spawnHummingbird(float player_x, float player_y);
+void moveHummingbird(float player_x, float player_y);
+
 
 int main() {
     srand(time(0));
@@ -58,6 +77,17 @@ int main() {
         cout << "Error: Could not load music file!" << endl;
     }
 
+    Font font;
+    if (!font.loadFromFile("Roboto/Roboto-Regular.ttf")) {
+        cout << "Error loading font!" << endl;
+    }
+
+    menu(window , font);
+
+    hummingbirdTexture.loadFromFile("Textures/bird.png");
+    hummingbirdSprite.setTexture(hummingbirdTexture);
+    hummingbirdSprite.setScale(0.5f, 0.5f); // Adjust scale
+    hummingbirdLanded = true;
     // Obstacle texture
     Texture obstacleTexture;
     // Load obstacle texture
@@ -76,7 +106,8 @@ int main() {
     playerTexture.loadFromFile("Textures/spray.png");
     playerSprite.setTexture(playerTexture);
     playerSprite.setPosition(player_x, player_y);
-    playerSprite.setTextureRect(IntRect(0, 0, boxPixelsX, boxPixelsY));
+    // playerSprite.setTextureRect(IntRect(0, 0, boxPixelsX, boxPixelsY));
+    playerSprite.setScale(0.5f, 0.5f);
 
     // Initializing Bullet and Bullet Sprites
     float bullet_x = player_x;
@@ -103,17 +134,22 @@ int main() {
     int beeDirection[maxBees];      // Bee movement direction (1 for right, -1 for left)
     Clock beeClock;
     float lastSpawnTime = 0;
+    Texture beeTexture;
+    beeTexture.loadFromFile("Textures/Regular_bee.png");
+    for (int i = 0; i < maxBees; i++) {
+        beeSprites[i].setTexture(beeTexture);
+        beeSprites[i].setRotation(180);
+        // beeSprites[i].setScale(2.5f,1.5f);
+        // beeSprites[i].setColor(Color::Transparent);
+    }
+
 
     // Honeycomb texture (this will be used for the paused bees)
-    Texture honeycombTexture;
+    
     honeycombTexture.loadFromFile("Textures/honeycomb.png");  // Add your honeycomb image here
 
-    // Score setup
-    int score = 0;
-    Font font;
-    if (!font.loadFromFile("Roboto/Roboto-Regular.ttf")) {
-        cout << "Error loading font!" << endl;
-    }
+    
+    
     Text scoreText;
     scoreText.setFont(font);
     scoreText.setCharacterSize(24);
@@ -123,8 +159,7 @@ int main() {
     Sprite spraySprite;
     spraySprite.setTexture(playerTexture);
 
-    Texture beeTexture;
-    beeTexture.loadFromFile("Textures/Regular_bee.png");
+    
     // spraySprite.setScale(1.0f, 1.0f);// Resize spray icon if needed
 
     while (window.isOpen()) {
@@ -136,16 +171,17 @@ int main() {
         }
 
         // Player movement logic
-        if (Keyboard::isKeyPressed(Keyboard::Left) && !checkCollisionWithObstacles(player_x - 5, player_y)) {
+        if (Keyboard::isKeyPressed(Keyboard::Left) && player_x > 0 && !checkCollisionWithObstacles(player_x - 5, player_y)) {
             player_x -= 5; // Move left
         }
-        if (Keyboard::isKeyPressed(Keyboard::Right) && !checkCollisionWithObstacles(player_x + 5, player_y)) {
+        if (Keyboard::isKeyPressed(Keyboard::Right) && player_x < resolutionX  - 35 && !checkCollisionWithObstacles(player_x + 5, player_y)) {
             player_x += 5; // Move right
         }
 
         // Bullet firing logic: Fire bullet when spacebar is pressed
         if (Keyboard::isKeyPressed(Keyboard::Space) && !bullet_exists && spraysAvailable > 0) {
-            bullet_x = player_x + (boxPixelsX / 2);  // Set the bullet position to player's current position
+            
+            bullet_x = player_x;  // Set the bullet position to player's current position
             bullet_y = player_y;  // Bullet starts from player's y position
             bullet_exists = true;  // Bullet exists now
             bulletClock.restart(); // Restart the bullet movement clock
@@ -165,8 +201,18 @@ int main() {
                     if (checkBulletHit(bullet_x, bullet_y, beeX[i], beeY[i])) {
                         // Change bee to honeycomb and stop it
                         beeSprites[i].setTexture(honeycombTexture);
+                        beeSprites[i].setScale(0.5f, 0.5f);
+                        beeSprites[i].setTextureRect(sf::IntRect(0, 0, 100, 100));
+                        score += 100;
                         beePaused[i] = true;  // Mark bee as paused (hit by bullet)
                         bullet_exists = false;  // Bullet disappears after hitting a bee
+
+                        if (hummingbirdLanded ) {
+                            hummingbirdX = beeX[i];
+                            hummingbirdY = beeY[i];
+                            hummingbirdLanded = false;
+                        }
+                        
                         break;  // Only allow the first hit to register
                     }
                 }
@@ -174,7 +220,7 @@ int main() {
         }
         window.clear();
         // Spawn and move bees
-        spawnBees(beeSprites, beeX, beeY, beeDirection, beeClock, lastSpawnTime, beeTexture);
+        spawnBees(beeSprites, beeX, beeY, beeDirection, beeClock, lastSpawnTime);
         moveBees(beeSprites, beeX, beeY, beeDirection);
 
         
@@ -206,17 +252,57 @@ int main() {
 
         // Display the spray icons
         for (int i = 0; i < spraysAvailable; i++) {
-            spraySprite.setPosition(10 + i * (spraySprite.getLocalBounds().width + 10), resolutionY - 50);
+            spraySprite.setScale(0.5f, 0.5f);
+            spraySprite.setPosition(30 * i , resolutionY - 50);
             window.draw(spraySprite); // Draw each spray icon
         }
 
-        
+        spawnHummingbird(player_x, player_y);
+        moveHummingbird(player_x, player_y);
+        drawHummingbird(window);
         // Display everything on screen
         window.display();
         
     }
 
 }
+
+void menu(RenderWindow& window, Font& menufont){
+        
+	
+    Text text_tostart(" Press Enter to Start Game",menufont,50);
+    text_tostart.setPosition(resolutionX/2 - 250,resolutionY/2 - 100);
+    text_tostart.setFillColor(Color::Green);
+
+    Text text_toexit("Exit",menufont,50);
+    text_toexit.setPosition(resolutionX/2,resolutionY/2 + 50);
+    text_toexit.setFillColor(Color::Red);
+
+    while (window.isOpen()){
+        Event e;
+        while( window.pollEvent(e)){
+        if(e.type == Event::Closed){
+                window.close();
+        }
+        
+        if(e.type == Event::KeyPressed){
+                if(e.key.code == Keyboard::Enter){
+                    return;
+                }
+                else if(e.key.code == Keyboard::Escape){
+                    window.close();
+                }
+            }
+        }
+        
+        window.clear(Color::Black);
+        window.draw(text_tostart);
+        window.draw(text_toexit);
+
+        // To display the updated menu
+        window.display();
+    }
+} 
 
 void drawPlayer(RenderWindow& window, float& player_x, float& player_y, Sprite& playerSprite) {
     playerSprite.setPosition(player_x, player_y);
@@ -238,17 +324,15 @@ void drawBullet(sf::RenderWindow& window, float& bullet_x, float& bullet_y, Spri
     window.draw(bulletSprite);
 }
 
-void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime, Texture beeTexture) {
+void spawnBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[], Clock& beeClock, float& lastSpawnTime) {
     // Random spawn interval (between 1 and 3 seconds)
     float currentTime = beeClock.getElapsedTime().asSeconds();
 
     if (currentTime - lastSpawnTime > (rand() % 3 + 1)) {
         // Spawn a new bee in the top-left corner
         for (int i = 0; i < maxBees; i++) {
-            if (!beeActive[i]) { // Check if the bee hasn't been spawned yet
+            if (!beeActive[i] && !beePaused[i]) { // Check if the bee hasn't been spawned yet
                 // Bee texture
-                
-                beeSprites[i].setTexture(beeTexture);
 
                 // Set starting position to top-left (0, 0)
                 beeX[i] = 10;
@@ -307,20 +391,36 @@ void moveBees(Sprite beeSprites[], float beeX[], float beeY[], int beeDirection[
             if (beeX[i] > resolutionX - boxPixelsX) {
                 beeDirection[i] = -1; // Turn left
                 beeY[i] += boxPixelsY; // Drop height by 1 step
+                beeSprites[i].setRotation(0);
             }
 
             // If bee reaches the left edge, turn it around and drop vertically
             if (beeX[i] < 0) {
                 beeDirection[i] = 1; // Turn right
                 beeY[i] += boxPixelsY; // Drop height by 1 step
+                beeSprites[i].setRotation(180);
             }
 
             // Update bee position
             beeSprites[i].setPosition(beeX[i], beeY[i]);
+            
+            // beeSprites[i].setRotation( beeDirection[i] * 180);
             if (spawnObstaclesWhenBeeHitsGround(beeX[i], beeY[i])) {
                 beeActive[i] = false;
+                beePaused[i] = true;
             }
 
+        } else if(beeActive[i] && beeSprites[i].getTexture() == &honeycombTexture) {
+            float hummingbirdX = hummingbirdSprite.getPosition().x;
+            float hummingbirdY = hummingbirdSprite.getPosition().y;
+            if (hummingbirdX >= beeX[i] - boxPixelsX && hummingbirdX <= beeX[i] + boxPixelsX && 
+                hummingbirdY >= beeY[i] - boxPixelsY && hummingbirdY <= beeY[i] + boxPixelsY) {
+                // If hummingbird lands on honeycomb, remove the honeycomb
+                // beeSprites[i].setTexture(hummingbirdTexture); // Set texture to empty
+                beeSprites[i].setColor(Color::Transparent); // Make it invisible
+                beeActive[i] = false;
+                score += 1000; 
+            }
         }
     }
 }
@@ -336,7 +436,7 @@ bool checkCollisionWithObstacles(float player_x, float player_y) {
     for (int i = 0; i < obstacleCount; i++) {
         if (obstacleActive[i]) {
             // Check if player position collides with any obstacle
-            if (player_x >= obstacleX[i] && player_x <= obstacleX[i] + boxPixelsX &&
+            if (player_x >= obstacleX[i] - boxPixelsX && player_x <= obstacleX[i] + boxPixelsX &&
                 player_y >= obstacleY[i] && player_y <= obstacleY[i] + boxPixelsY) {
                 return true;
             }
@@ -352,13 +452,55 @@ void drawObstacles(RenderWindow& window, Texture& obstacleTexture) {
             obstacleSprite.setTexture(obstacleTexture);
             obstacleSprite.setPosition(obstacleX[i], obstacleY[i]);
 
-            // Scale the obstacle sprite to fit the grid size
-            obstacleSprite.setScale(static_cast<float>(boxPixelsX) / obstacleSprite.getLocalBounds().width,
-                                    static_cast<float>(boxPixelsY) / obstacleSprite.getLocalBounds().height);
-
             window.draw(obstacleSprite);
         }
     }
 }
 
+void drawHummingbird(RenderWindow& window) {
+    if (hummingbirdActive) {
+        window.draw(hummingbirdSprite);  // Draw the hummingbird
+    }
+}
+
+void spawnHummingbird(float player_x, float player_y) {
+    float currentTime = hummingbirdClock.getElapsedTime().asSeconds();
+
+    if (currentTime - lastHummingbirdSpawnTime > (rand() % 6 + 5)) {
+        hummingbirdX = rand() % (resolutionX - boxPixelsX);  // Random X within the screen width
+        hummingbirdY = rand() % (gameRows / 2) * boxPixelsY; // Random Y position above the player
+
+        hummingbirdActive = true;
+        lastHummingbirdSpawnTime = currentTime;
+        hummingbirdLanded = false;
+        hummingbirdClock.restart();
+    }
+}
+
+
+void moveHummingbird(float player_x, float player_y) {
+    if (hummingbirdActive) {
+        float deltaX = hummingbirdX - hummingbirdSprite.getPosition().x;
+        float deltaY = hummingbirdY - hummingbirdSprite.getPosition().y;
+        if (deltaX != 0 || deltaY == 0) { 
+             float moveX = 1;
+             if (deltaX < 0) {
+                moveX = -1;
+             }
+
+             float moveY = 1;
+             if (deltaY < 0) {
+                moveY = -1;
+             }
+
+            // Move hummingbird towards target
+            hummingbirdSprite.move(moveX, moveY); // Move at constant speed
+        } else {
+            // Reset hummingbird after landing
+            hummingbirdLanded = true;
+            spawnHummingbird(player_x, player_y); // Spawn a new target
+            
+        }
+    }
+}
 
